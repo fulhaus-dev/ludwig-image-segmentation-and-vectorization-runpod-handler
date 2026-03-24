@@ -3,6 +3,9 @@ Core processing pipeline: DINO → SAM 2.1 → SigLIP 2
 Loaded once at container startup, called per-item.
 """
 
+import warnings
+warnings.filterwarnings("ignore", message="You are using a model of type.*sam2_video.*")
+
 import torch
 import cv2
 import numpy as np
@@ -50,18 +53,20 @@ def load_models():
     dino_model.eval()
 
     # 2. SAM 2.1 Hiera-Tiny
-    sam_processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-tiny")
+    sam_processor = Sam2Processor.from_pretrained(
+        "facebook/sam2.1-hiera-tiny", use_fast=True
+    )
     sam_model = Sam2Model.from_pretrained(
-        "facebook/sam2.1-hiera-tiny", torch_dtype=compute_dtype
+        "facebook/sam2.1-hiera-tiny", dtype=compute_dtype
     ).to(device)
     sam_model.eval()
 
     # 3. SigLIP 2 So400m
     siglip_processor = AutoProcessor.from_pretrained(
-        "google/siglip2-so400m-patch14-384"
+        "google/siglip2-so400m-patch14-384", use_fast=True
     )
     siglip_model = AutoModel.from_pretrained(
-        "google/siglip2-so400m-patch14-384", torch_dtype=compute_dtype
+        "google/siglip2-so400m-patch14-384", dtype=compute_dtype
     ).to(device)
     siglip_model.eval()
 
@@ -105,7 +110,7 @@ def run_dino(pil_img: Image.Image, grounding_prompt: str) -> list | None:
 def run_sam(pil_img: Image.Image, box: list) -> np.ndarray:
     """
     Run SAM 2.1 with box prompt. Returns BGRA cutout as numpy array.
-    Adapted from working Colab code.
+    pil_img must be RGB PIL Image (same as passed to DINO).
     """
     img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
@@ -120,7 +125,7 @@ def run_sam(pil_img: Image.Image, box: list) -> np.ndarray:
     # Pick best mask by IoU score
     masks_tensor = sam_processor.post_process_masks(
         outputs.pred_masks, inputs["original_sizes"]
-    )[0]  # [1, num_masks, H, W]
+    )[0]
 
     iou_scores = outputs.iou_scores[0][0]
     best_idx = iou_scores.argmax().item()
@@ -153,7 +158,13 @@ def run_sam(pil_img: Image.Image, box: list) -> np.ndarray:
 def run_siglip(pil_img: Image.Image) -> list:
     """
     Run SigLIP 2 on a PIL image. Returns 1152-d L2-normalized vector as list.
+    Handles RGBA by compositing onto white background first.
     """
+    if pil_img.mode == "RGBA":
+        bg = Image.new("RGB", pil_img.size, (255, 255, 255))
+        bg.paste(pil_img, mask=pil_img.split()[3])
+        pil_img = bg
+
     inputs = siglip_processor(
         images=[pil_img], return_tensors="pt"
     ).to(device)
