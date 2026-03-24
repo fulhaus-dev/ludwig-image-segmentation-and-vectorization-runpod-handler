@@ -15,7 +15,7 @@ _public_url = None
 
 def init_r2():
     """Initialize R2 client. Called once at container startup."""
-    global _s3_client, _bucket, _public_url
+    global _s3_client, _bucket, _public_url, _folder
 
     _s3_client = boto3.client(
         "s3",
