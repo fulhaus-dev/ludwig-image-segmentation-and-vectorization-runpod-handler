@@ -43,4 +43,4 @@ def upload_cutout(sku: str, png_bytes: bytes) -> str:
         ContentType="image/png",
     )
 
-    return f"{_public_url}/{_folder}/{key}"
+    return f"{_public_url}/{key}"
