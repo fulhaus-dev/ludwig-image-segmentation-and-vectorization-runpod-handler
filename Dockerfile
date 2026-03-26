@@ -25,6 +25,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY download_models.py .
 RUN python download_models.py
 
+# Add this line to force offline mode at runtime
+ENV HF_HUB_OFFLINE=1
+
 # Copy handler
 COPY handler.py .
 
